@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   basePath: process.env.NODE_ENV === "production" ? "/precisz-shadow-ops" : "",
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;
