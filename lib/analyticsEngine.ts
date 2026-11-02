@@ -1,123 +1,127 @@
-// Precisz Shadow-Ops: Phase 7 Autonomous Operational Intelligence Engine
-// Mathematical models for OEE, Defect Cost, and Cross-Correlation Risk
+// Precisz Shadow-Ops: Deterministic Operations Engine (No Fake AI/Probabilities)
 
-export interface MachineMetrics {
-  plannedMinutes: number;
+export interface MachineRecord {
+  id: string;
+  name: string;
+  tenantId: string;
+  status: "RUNNING" | "IDLE" | "MAINTENANCE" | "OFFLINE";
   downtimeMinutes: number;
-  idealCycleTimeSec: number; // in seconds per piece
-  totalProduced: number;
-  rejectedPieces: number;
+  source: "MANUALLY RECORDED" | "SIMULATED SENSOR" | "DEMO DATASET";
+  lastLogged: string;
 }
 
-export interface OEEBreakdown {
-  availability: number;
-  performance: number;
-  quality: number;
-  oee: number;
+export interface ProductionOrder {
+  id: string;
+  orderNumber: string;
+  tenantId: string;
+  targetQty: number;
+  producedQty: number;
+  rejectedQty: number;
+  plannedDowntimeMinutes: number;
+  deadlineHoursRemaining: number;
+  materialAvailable: boolean;
 }
 
-/**
- * 1. Standard Factory OEE Formula (Availability x Performance x Quality)
- */
-export function calculateOEE(metrics: MachineMetrics): OEEBreakdown {
-  const operatingMinutes = Math.max(0, metrics.plannedMinutes - metrics.downtimeMinutes);
+export interface OperationalRiskEvaluation {
+  orderNumber: string;
+  riskScore: number; // 0 - 100 deterministic index
+  riskLevel: "NORMAL" | "WATCH" | "HIGH" | "CRITICAL";
+  isDeficit: boolean;
+  deficitUnits: number;
+  rejectionRatePercent: number;
+  productionAchievementPercent: number;
+  factors: {
+    downtimeImpact: number;
+    rejectionImpact: number;
+    inventoryShortageImpact: number;
+    scheduleCompressionImpact: number;
+  };
+  rootCauses: string[];
+  recommendedAction: string;
+}
 
-  // Availability = Operating Time / Planned Production Time
-  const availability = metrics.plannedMinutes > 0 ? (operatingMinutes / metrics.plannedMinutes) * 100 : 0;
-
-  // Performance = (Total Produced * Ideal Cycle Time in min) / Operating Time
-  const idealOperatingMinutesNeeded = (metrics.totalProduced * metrics.idealCycleTimeSec) / 60;
-  const performance = operatingMinutes > 0 
-    ? Math.min(100, (idealOperatingMinutesNeeded / operatingMinutes) * 100) 
-    : 0;
-
-  // Quality = Good Parts / Total Produced
-  const goodParts = Math.max(0, metrics.totalProduced - metrics.rejectedPieces);
-  const quality = metrics.totalProduced > 0 ? (goodParts / metrics.totalProduced) * 100 : 0;
-
-  // Total OEE
-  const oee = (availability / 100) * (performance / 100) * (quality / 100) * 100;
+// 1. Transparent KPI Calculator
+export function calculateTenantKPIs(order: ProductionOrder, machines: MachineRecord[]) {
+  const goodProduction = Math.max(0, order.producedQty - order.rejectedQty);
+  const achievement = order.targetQty > 0 ? (goodProduction / order.targetQty) * 100 : 0;
+  const inspectedUnits = order.producedQty;
+  const rejectionRate = inspectedUnits > 0 ? (order.rejectedQty / inspectedUnits) * 100 : 0;
+  const deficit = Math.max(0, order.targetQty - goodProduction);
+  const totalDowntime = machines.reduce((sum, m) => sum + m.downtimeMinutes, 0);
 
   return {
-    availability: Number(availability.toFixed(1)),
-    performance: Number(performance.toFixed(1)),
-    quality: Number(quality.toFixed(1)),
-    oee: Number(oee.toFixed(1)),
+    plannedTarget: order.targetQty,
+    producedGood: goodProduction,
+    rejectedUnits: order.rejectedQty,
+    achievementPercent: Number(achievement.toFixed(1)),
+    rejectionRatePercent: Number(rejectionRate.toFixed(1)),
+    deficitUnits: deficit,
+    totalDowntimeMinutes: totalDowntime,
   };
 }
 
-/**
- * 2. Scrap Financial Cost Calculation
- */
-export function calculateScrapLoss(rejectedQty: number, unitMaterialCost: number, overheadMarkup: number = 1.15): number {
-  return Math.round(rejectedQty * unitMaterialCost * overheadMarkup);
-}
-
-/**
- * 3. Cross-Module Delivery Delay Risk Prediction
- * Correlates Machine Loss + Scrap Loss + Material Deficit against Delivery Commitment
- */
-export interface CrossCorrelationInputs {
-  orderTargetQty: number;
-  completedQty: number;
-  remainingHoursToDeadline: number;
-  activeLinePacePerHour: number;
-  downtimeMinutes: number;
-  scrapCount: number;
-  materialAvailableKg: number;
-  materialRequiredKg: number;
-}
-
-export interface CorrelationResult {
-  riskPercentage: number;
-  deficitPieces: number;
-  shortageSeverity: "LOW" | "ELEVATED" | "CRITICAL";
-  projectedDelayHours: number;
-  recoveryOvertimeHoursNeeded: number;
-  recoveryCostInr: number;
-}
-
-export function evaluateOperationalRisk(inputs: CrossCorrelationInputs): CorrelationResult {
-  const remainingPiecesNeeded = inputs.orderTargetQty - inputs.completedQty;
+// 2. Transparent Rule-Based Risk Engine (Replacing Unsupported "92% Probability")
+export function evaluateOrderCommitmentRisk(
+  order: ProductionOrder,
+  machines: MachineRecord[]
+): OperationalRiskEvaluation {
+  const kpis = calculateTenantKPIs(order, machines);
+  const rootCauses: string[] = [];
   
-  // Normal achievable output with remaining working hours
-  const projectedNormalOutput = inputs.remainingHoursToDeadline * inputs.activeLinePacePerHour;
-  
-  // Losses introduced by downtime (in terms of pieces)
-  const downtimePieceLoss = (inputs.downtimeMinutes / 60) * inputs.activeLinePacePerHour;
-  
-  // Total Deficit considering current deficit, scrap replacement, and downtime loss
-  const totalDeficit = remainingPiecesNeeded + inputs.scrapCount - projectedNormalOutput;
-
-  let risk = 0;
-  let severity: "LOW" | "ELEVATED" | "CRITICAL" = "LOW";
-
-  if (totalDeficit <= 0) {
-    risk = 8; // Baseline operational buffer risk
-    severity = "LOW";
-  } else {
-    // If deficit exists, calculate risk percentage
-    const baseRisk = (totalDeficit / inputs.orderTargetQty) * 100;
-    
-    // Additional risk multiplier if raw material is deficient
-    const materialShortage = Math.max(0, inputs.materialRequiredKg - inputs.materialAvailableKg);
-    const materialPenalty = materialShortage > 0 ? 25 : 0;
-    
-    risk = Math.min(96, Math.round(baseRisk + materialPenalty + 40));
-    severity = risk > 75 ? "CRITICAL" : "ELEVATED";
+  // Factor 1: Machine Downtime
+  let downtimeImpact = 0;
+  if (kpis.totalDowntimeMinutes > 30) {
+    downtimeImpact = Math.min(30, (kpis.totalDowntimeMinutes / 60) * 20);
+    rootCauses.push(`Machinery cumulative downtime at ${kpis.totalDowntimeMinutes} mins.`);
   }
 
-  // Calculate required recovery intervention
-  const overtimeHoursNeeded = Math.ceil(Math.max(0, totalDeficit) / inputs.activeLinePacePerHour);
-  const projectedDelay = totalDeficit > 0 ? Number((totalDeficit / inputs.activeLinePacePerHour).toFixed(1)) : 0;
-  const recoveryCost = overtimeHoursNeeded * 1200; // ₹1,200/hr (overtime labor + machine power)
+  // Factor 2: Rejection Threshold (Tolerance: 2.0%)
+  let rejectionImpact = 0;
+  if (kpis.rejectionRatePercent > 2.0) {
+    rejectionImpact = Math.min(30, (kpis.rejectionRatePercent - 2.0) * 10);
+    rootCauses.push(`Rejection rate ${kpis.rejectionRatePercent}% breaches 2.0% customer tolerance.`);
+  }
+
+  // Factor 3: Inventory Shortage
+  let inventoryShortageImpact = 0;
+  if (!order.materialAvailable) {
+    inventoryShortageImpact = 25;
+    rootCauses.push("SS304 raw billet buffer stock insufficient for replacement batch.");
+  }
+
+  // Factor 4: Schedule / Output Deficit
+  let scheduleImpact = 0;
+  if (kpis.deficitUnits > 0 && order.deadlineHoursRemaining < 6) {
+    scheduleImpact = 15;
+    rootCauses.push(`Deficit of ${kpis.deficitUnits} units with only ${order.deadlineHoursRemaining}h before dispatch window.`);
+  }
+
+  // Deterministic Score out of 100
+  const rawScore = Math.min(100, Math.round(downtimeImpact + rejectionImpact + inventoryShortageImpact + scheduleImpact));
+
+  let riskLevel: OperationalRiskEvaluation["riskLevel"] = "NORMAL";
+  if (rawScore >= 75) riskLevel = "CRITICAL";
+  else if (rawScore >= 50) riskLevel = "HIGH";
+  else if (rawScore >= 25) riskLevel = "WATCH";
 
   return {
-    riskPercentage: risk,
-    deficitPieces: Math.max(0, Math.round(totalDeficit)),
-    shortageSeverity: severity,
-    projectedDelayHours: projectedDelay,
-    recoveryOvertimeHoursNeeded: overtimeHoursNeeded,
-    recoveryCostInr: recoveryCost,
+    orderNumber: order.orderNumber,
+    riskScore: rawScore,
+    riskLevel,
+    isDeficit: kpis.deficitUnits > 0,
+    deficitUnits: kpis.deficitUnits,
+    rejectionRatePercent: kpis.rejectionRatePercent,
+    productionAchievementPercent: kpis.achievementPercent,
+    factors: {
+      downtimeImpact: Math.round(downtimeImpact),
+      rejectionImpact: Math.round(rejectionImpact),
+      inventoryShortageImpact,
+      scheduleCompressionImpact: scheduleImpact,
+    },
+    rootCauses,
+    recommendedAction:
+      rawScore >= 75
+        ? "Authorize Shift 2 CNC-04 reroute + allocate 120kg SS304 emergency buffer."
+        : "Maintain standard shift cycle.",
   };
 }
