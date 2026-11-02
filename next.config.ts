@@ -1,11 +1,15 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === "production";
+const repoName = "/precisz-shadow-ops";
+
 const nextConfig: NextConfig = {
   output: "export",
   images: {
     unoptimized: true,
   },
-  basePath: process.env.NODE_ENV === "production" ? "/precisz-shadow-ops" : "",
+  basePath: isProd ? repoName : "",
+  assetPrefix: isProd ? repoName : "",
   typescript: {
     ignoreBuildErrors: true,
   },
