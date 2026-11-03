@@ -12,9 +12,13 @@ export type TabType =
   | "DOCUMENTS"
   | "GOVERNANCE";
 
+export type UserRole = "OPERATIONS_LEAD" | "SHOPFLOOR_OPERATOR";
+
 export default function PreciszDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("COMMAND");
   const [activeShift] = useState("Shift 1 (08:00 - 16:30)");
+  const [currentRole, setCurrentRole] = useState<UserRole>("OPERATIONS_LEAD");
+  
   const [downtimeMinutes, setDowntimeMinutes] = useState(45);
   const [bufferStockAllocated, setBufferStockAllocated] = useState(false);
   const [showRiskModal, setShowRiskModal] = useState(false);
@@ -23,6 +27,19 @@ export default function PreciszDashboard() {
   const [copilotInput, setCopilotInput] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingDoc, setIsProcessingDoc] = useState(false);
+
+  // Audit Logs
+  const [auditLog, setAuditLog] = useState([
+    {
+      id: "LOG-101",
+      timestamp: "08:15 AM",
+      action: "Shift 01 Telemetry Calibration Check",
+      authorizedBy: "Yuvaraj V",
+      role: "OPERATIONS_LEAD",
+      status: "APPROVED",
+      impactSummary: "Calibrated 4 machining cells before line startup.",
+    },
+  ]);
 
   const [copilotHistory, setCopilotHistory] = useState([
     {
@@ -92,10 +109,28 @@ export default function PreciszDashboard() {
     );
   };
 
+  // STRICT OPERATIONAL LEAD APPROVAL LOGIC
   const handleExecuteRecovery = () => {
+    if (currentRole !== "OPERATIONS_LEAD") {
+      alert("Unauthorized: Only an authenticated OPERATIONS_LEAD can approve floor recovery directives.");
+      return;
+    }
+
     setDowntimeMinutes(0);
     setBufferStockAllocated(true);
     setAlerts((prev) => prev.map((a) => ({ ...a, status: "RESOLVED" })));
+
+    const newLog = {
+      id: `LOG-${Date.now().toString().slice(-4)}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      action: "Executed Shift-2 Reroute to CNC-04 & Released 60kg SS304 Buffer",
+      authorizedBy: "Yuvaraj V",
+      role: "OPERATIONS_LEAD",
+      status: "APPROVED",
+      impactSummary: "Eliminated PO-904 deficit, restored CNC-03 to running status, cleared active alerts.",
+    };
+
+    setAuditLog((prev) => [newLog, ...prev]);
     setShowRiskModal(false);
   };
 
@@ -119,12 +154,12 @@ export default function PreciszDashboard() {
 
     setTimeout(() => {
       let reply = "Operational analysis: ";
-      if (query.toLowerCase().includes("downtime") || query.toLowerCase().includes("cnc")) {
-        reply += `CNC Lathe #03 recorded ${downtimeMinutes}m loss. Standby CNC #04 is running at 0m loss.`;
-      } else if (query.toLowerCase().includes("kpi") || query.toLowerCase().includes("target")) {
-        reply += `Target: ${targetUnits} | Good: ${goodUnits} | Rejection: ${rejectionRate}% | Deficit: ${deficitUnits} pcs.`;
+      if (query.toLowerCase().includes("approve") || query.toLowerCase().includes("lead")) {
+        reply += `Approval gate is locked to OPERATIONS_LEAD (Yuvaraj V). Unauthorized roles cannot clear thermal loss or unlock SS304 buffers.`;
+      } else if (query.toLowerCase().includes("downtime") || query.toLowerCase().includes("cnc")) {
+        reply += `CNC Lathe #03 recorded ${downtimeMinutes}m loss. Standby CNC #04 is ready for reroute upon lead approval.`;
       } else {
-        reply += `Order #ORD-2026-904 delivery index is ${calculatedRiskScore}/100 (${riskLevel}).`;
+        reply += `Order #ORD-2026-904 risk score is ${calculatedRiskScore}/100 (${riskLevel}). Action requires Lead sign-off.`;
       }
       setCopilotHistory((prev) => [...prev, { sender: "system", text: reply }]);
     }, 300);
@@ -137,6 +172,7 @@ export default function PreciszDashboard() {
         ["PRECISZ SHADOW-OPS - COMPLIANCE REPORT"],
         ["Tenant", "ABC Precision Components (Ambattur, Chennai)"],
         ["Shift", activeShift],
+        ["Authorized Sign-off", "Yuvaraj V (OPERATIONS_LEAD)"],
         ["Target Qty", targetUnits],
         ["Good Produced", goodUnits],
         ["Deficit", deficitUnits],
@@ -167,16 +203,15 @@ export default function PreciszDashboard() {
           </span>
         </div>
         <div className="flex items-center gap-3 font-mono text-[11px]">
-          <span>DATA ORIGIN: <strong>SHOPFLOOR LOGS & SIMULATED SENSORS</strong></span>
+          <span>GOVERNANCE: <strong className="text-emerald-400">ROLE-BASED SIGN-OFF ACTIVE</strong></span>
           <span className="text-slate-600 hidden sm:inline">|</span>
           <span className="text-cyan-400 hidden sm:inline">LAST SYNC: 10:48 AM IST</span>
         </div>
       </div>
 
-      {/* 2. Top Primary Navbar (Branding & Controls) */}
+      {/* 2. Top Primary Navbar */}
       <header className="border-b border-slate-800 bg-[#0A0E17]/95 backdrop-blur sticky top-0 z-30 px-4 md:px-6 py-2.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Logo & Product Title */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="w-8 h-8 rounded bg-orange-600 flex items-center justify-center font-black text-slate-950 text-lg tracking-tighter shadow-md shadow-orange-600/30">
               PS
@@ -189,11 +224,11 @@ export default function PreciszDashboard() {
             </div>
           </div>
 
-          {/* Right Header Controls */}
+          {/* Right Header Controls with Role Switcher */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-right hidden lg:block font-mono text-xs">
               <div className="font-semibold text-slate-200 text-xs">ABC Precision Components</div>
-              <div className="text-[10px] text-slate-500">Ambattur, Chennai • {activeShift}</div>
+              <div className="text-[10px] text-slate-500">Ambattur • {activeShift}</div>
             </div>
 
             {/* Notification Bell */}
@@ -211,7 +246,6 @@ export default function PreciszDashboard() {
                 )}
               </button>
 
-              {/* Notification Dropdown */}
               {showNotificationDrawer && (
                 <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-[#0C121D] border border-slate-800 rounded-xl shadow-2xl z-50 p-3 space-y-2 font-mono">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -248,7 +282,6 @@ export default function PreciszDashboard() {
               )}
             </div>
 
-            {/* Copilot Trigger */}
             <button
               onClick={() => setShowCopilot(true)}
               className="px-2.5 py-1.5 bg-cyan-950/40 border border-cyan-800 hover:bg-cyan-900/50 text-cyan-300 rounded text-xs font-mono flex items-center gap-1.5 cursor-pointer"
@@ -256,20 +289,33 @@ export default function PreciszDashboard() {
               <span>🤖</span> <span className="hidden sm:inline">Copilot</span>
             </button>
 
-            {/* Profile Avatar */}
+            {/* Profile Avatar with Role Switcher for CEO Demo */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
               <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-orange-400 font-mono">
                 YU
               </div>
-              <div className="text-left text-[11px] leading-tight hidden sm:block">
+              <div className="text-left text-[11px] leading-tight">
                 <div className="font-semibold text-slate-200">Yuvaraj V</div>
-                <div className="text-slate-500 text-[9px] font-mono">OPERATIONS_LEAD</div>
+                {/* ROLE SWITCHER SELECT */}
+                <select
+                  value={currentRole}
+                  onChange={(e) => setCurrentRole(e.target.value as UserRole)}
+                  className="bg-transparent text-[9px] font-mono text-cyan-400 border-none outline-none cursor-pointer p-0"
+                  title="Switch Role to test authorization gating"
+                >
+                  <option value="OPERATIONS_LEAD" className="bg-slate-900 text-cyan-300">
+                    OPERATIONS_LEAD (Authorized)
+                  </option>
+                  <option value="SHOPFLOOR_OPERATOR" className="bg-slate-900 text-rose-400">
+                    SHOPFLOOR_OPERATOR (Restricted)
+                  </option>
+                </select>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 3. Sub-Navigation Bar: Clean 8 Tabs Container */}
+        {/* 3. Sub-Navigation Bar */}
         <div className="max-w-7xl mx-auto mt-2 pt-2 border-t border-slate-800/60 overflow-x-auto scrollbar-none">
           <nav className="flex items-center gap-1 w-max pb-1">
             {[
@@ -409,86 +455,76 @@ export default function PreciszDashboard() {
               </div>
             </div>
 
-            {/* Simulator & Risk Box */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="p-5 bg-[#0C121D] border border-slate-800 rounded-lg flex flex-col justify-between">
+            {/* ORDER RISK EVALUATION BOX WITH GOVERNANCE SIGN-OFF */}
+            <div className="p-5 bg-[#0C121D] border border-slate-800 rounded-lg">
+              <div className="flex flex-wrap justify-between items-start gap-2 border-b border-slate-800 pb-3">
                 <div>
-                  <div className="text-xs font-mono uppercase text-cyan-400 tracking-wider flex items-center justify-between">
-                    <span>What-If Simulator</span>
-                    <span className="text-slate-500 text-[10px]">TOOL</span>
-                  </div>
-                  <h3 className="text-sm font-bold text-white mt-1">Adjust CNC-03 Downtime</h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Simulate how floor maintenance recovery impacts active risk in real-time.
-                  </p>
-
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between text-xs font-mono">
-                      <span className="text-slate-400">Downtime Loss:</span>
-                      <span className="text-cyan-400 font-bold">{downtimeMinutes} Mins</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="60"
-                      value={downtimeMinutes}
-                      onChange={(e) => setDowntimeMinutes(Number(e.target.value))}
-                      className="w-full accent-cyan-500 cursor-pointer"
-                    />
-                  </div>
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-800/80 flex justify-between items-center text-xs font-mono">
-                  <span className="text-slate-400">Projected OEE:</span>
-                  <span className="text-emerald-400 font-bold">{oeeEfficiency}%</span>
-                </div>
-              </div>
-
-              <div className="lg:col-span-2 p-5 bg-[#0C121D] border border-slate-800 rounded-lg flex flex-col justify-between">
-                <div>
-                  <div className="flex flex-wrap justify-between items-start gap-2">
-                    <div>
-                      <div className="text-xs font-mono uppercase text-slate-400">Order Risk Evaluation Engine</div>
-                      <h3 className="text-sm font-bold text-white mt-0.5">PO #ORD-2026-904 Delivery Viability</h3>
-                    </div>
-                    <span
-                      className={`px-2.5 py-1 rounded text-xs font-mono font-bold border ${
-                        riskLevel === "CRITICAL"
-                          ? "bg-rose-950/60 text-rose-400 border-rose-800"
-                          : "bg-emerald-950/60 text-emerald-400 border-emerald-800"
-                      }`}
-                    >
-                      {riskLevel} RISK (Rule Index: {calculatedRiskScore}/100)
+                  <div className="text-xs font-mono uppercase text-slate-400 flex items-center gap-2">
+                    <span>Order Commitment Governance</span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-cyan-400">
+                      Sign-off Required
                     </span>
                   </div>
+                  <h3 className="text-sm font-bold text-white mt-0.5">
+                    PO #ORD-2026-904 Delivery Recovery Directive
+                  </h3>
+                </div>
+                <span
+                  className={`px-2.5 py-1 rounded text-xs font-mono font-bold border ${
+                    riskLevel === "CRITICAL"
+                      ? "bg-rose-950/60 text-rose-400 border-rose-800"
+                      : "bg-emerald-950/60 text-emerald-400 border-emerald-800"
+                  }`}
+                >
+                  {riskLevel} RISK (Rule Index: {calculatedRiskScore}/100)
+                </span>
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 text-xs font-mono">
-                    <div className="p-2.5 bg-slate-950 border border-slate-800 rounded">
-                      <div className="text-slate-400">Machinery Downtime</div>
-                      <div className="text-white font-bold mt-1">
-                        {downtimeMinutes > 30 ? "+35 pts (Breached 30m limit)" : "0 pts (Optimal)"}
-                      </div>
-                    </div>
-                    <div className="p-2.5 bg-slate-950 border border-slate-800 rounded">
-                      <div className="text-slate-400">Quality Tolerance</div>
-                      <div className="text-white font-bold mt-1">+30 pts (Rejection 4.9% &gt; 2.0%)</div>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-xs font-mono">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded space-y-2">
+                  <div className="font-bold text-slate-300 uppercase text-[11px]">Proposed Operational Directive:</div>
+                  <ul className="text-slate-400 space-y-1 text-[11px]">
+                    <li>• Reroute 110 units machining to Standby CNC Lathe #04.</li>
+                    <li>• Allocate 60kg SS304 emergency billet buffer from Store A.</li>
+                    <li>• Lock CNC-03 for 30m thermal coolant flushing.</li>
+                  </ul>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap justify-between items-center gap-3">
-                  <div className="text-xs text-slate-300">
-                    {downtimeMinutes === 0 && bufferStockAllocated
-                      ? "✓ All operational bottlenecks eliminated. Order fulfillment on schedule."
-                      : "Action required: Divert 110 units to Standby CNC-04 and release raw billets."}
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-400">Authorization Gate:</span>
+                      <span className={`font-bold ${currentRole === "OPERATIONS_LEAD" ? "text-emerald-400" : "text-rose-400"}`}>
+                        {currentRole}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1">
+                      {currentRole === "OPERATIONS_LEAD"
+                        ? "✓ Verified credentials for Yuvaraj V (Lead). Sign-off enabled."
+                        : "🔒 Sign-off disabled. Switch role to OPERATIONS_LEAD in top-right to authorize."}
+                    </div>
                   </div>
-                  {calculatedRiskScore > 0 && (
-                    <button
-                      onClick={() => setShowRiskModal(true)}
-                      className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-slate-950 font-bold text-xs rounded font-mono cursor-pointer"
-                    >
-                      Authorize Recovery Plan
-                    </button>
-                  )}
+
+                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">
+                      {downtimeMinutes === 0 ? "✓ Recovery Executed" : "Status: Pending Approval"}
+                    </span>
+                    
+                    {downtimeMinutes > 0 && (
+                      <button
+                        onClick={handleExecuteRecovery}
+                        disabled={currentRole !== "OPERATIONS_LEAD"}
+                        className={`px-4 py-2 font-bold text-xs rounded font-mono transition-all flex items-center gap-1.5 ${
+                          currentRole === "OPERATIONS_LEAD"
+                            ? "bg-orange-600 hover:bg-orange-500 text-slate-950 cursor-pointer shadow-lg shadow-orange-600/30"
+                            : "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
+                        }`}
+                      >
+                        <span>{currentRole === "OPERATIONS_LEAD" ? "✍️" : "🔒"}</span>
+                        <span>{currentRole === "OPERATIONS_LEAD" ? "Approve Recovery Plan" : "Lead Sign-off Required"}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -858,26 +894,52 @@ export default function PreciszDashboard() {
                 <span>📥</span> Export Shift Compliance Report (.CSV)
               </button>
             </div>
+
             <div className="p-5 bg-slate-900 border border-slate-800 rounded-lg">
-              <h3 className="text-sm font-bold text-white mb-2">Immutable Authorizations Log</h3>
-              <div className="text-xs font-mono text-slate-400 space-y-2">
-                <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex justify-between">
-                  <span>LOG-101 • Calibration Check Passed</span>
-                  <span className="text-slate-500">08:15 AM • Yuvaraj V</span>
-                </div>
-                {downtimeMinutes === 0 && (
-                  <div className="p-2.5 bg-emerald-950/40 border border-emerald-800 rounded flex justify-between text-emerald-300">
-                    <span>LOG-102 • Recovery Reroute Executed & SS304 Buffer Unlocked</span>
-                    <span className="text-emerald-400">Just Now • Yuvaraj V</span>
-                  </div>
-                )}
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-bold text-white">Cryptographic Operational Directives Log</h3>
+                <span className="text-[11px] font-mono text-slate-500">Tenant ID: ABC-AMB</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse font-mono">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
+                      <th className="py-2.5 px-3">Log ID</th>
+                      <th className="py-2.5 px-3">Timestamp</th>
+                      <th className="py-2.5 px-3">Directive</th>
+                      <th className="py-2.5 px-3">Authorized Sign-off</th>
+                      <th className="py-2.5 px-3">Role</th>
+                      <th className="py-2.5 px-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {auditLog.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-800/30">
+                        <td className="py-3 px-3 text-cyan-400 font-bold">{log.id}</td>
+                        <td className="py-3 px-3 text-slate-400">{log.timestamp}</td>
+                        <td className="py-3 px-3 text-slate-200">
+                          <div className="font-semibold">{log.action}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">{log.impactSummary}</div>
+                        </td>
+                        <td className="py-3 px-3 text-slate-300">{log.authorizedBy}</td>
+                        <td className="py-3 px-3 text-slate-400">{log.role}</td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800">
+                            {log.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* Recovery Modal */}
+      {/* Recovery Modal with Strict Role Validation */}
       {showRiskModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#0C121D] border border-slate-800 rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl font-mono">
@@ -908,7 +970,17 @@ export default function PreciszDashboard() {
             </div>
 
             <div className="bg-orange-950/30 border border-orange-900/60 p-3 rounded text-xs text-orange-200">
-              <strong>Proposed Action:</strong> Reroute 110 units to Standby CNC Lathe #04 and unlock emergency SS304 buffer stock.
+              <div className="font-bold">Authorized Recovery Action:</div>
+              <div className="mt-1 text-[11px] text-slate-300">
+                Reroute 110 units to Standby CNC Lathe #04 and unlock emergency SS304 buffer stock to recover PO-904 delivery commit within 4 hours.
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-slate-950 rounded border border-slate-800 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Current Sign-off Role:</span>
+              <span className={`font-bold ${currentRole === "OPERATIONS_LEAD" ? "text-emerald-400" : "text-rose-400"}`}>
+                {currentRole}
+              </span>
             </div>
 
             <div className="flex justify-end gap-3 pt-2 text-xs">
@@ -920,9 +992,14 @@ export default function PreciszDashboard() {
               </button>
               <button
                 onClick={handleExecuteRecovery}
-                className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-slate-950 font-bold rounded cursor-pointer"
+                disabled={currentRole !== "OPERATIONS_LEAD"}
+                className={`px-4 py-2 font-bold rounded cursor-pointer font-mono ${
+                  currentRole === "OPERATIONS_LEAD"
+                    ? "bg-orange-600 hover:bg-orange-500 text-slate-950 shadow-md shadow-orange-600/30"
+                    : "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-50"
+                }`}
               >
-                Authorize Recovery
+                {currentRole === "OPERATIONS_LEAD" ? "✍️ Authorize Recovery" : "🔒 Lead Sign-off Required"}
               </button>
             </div>
           </div>
