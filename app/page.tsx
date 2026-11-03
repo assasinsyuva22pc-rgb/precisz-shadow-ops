@@ -8,16 +8,22 @@ export type TabType =
   | "INVENTORY"
   | "QUALITY"
   | "ORDERS"
+  | "INTEGRATIONS"
+  | "DOCUMENTS"
   | "GOVERNANCE";
 
 export default function PreciszDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("COMMAND");
-  const [activeShift, setActiveShift] = useState("Shift 1 (08:00 - 16:30)");
+  const [activeShift] = useState("Shift 1 (08:00 - 16:30)");
   const [downtimeMinutes, setDowntimeMinutes] = useState(45);
   const [bufferStockAllocated, setBufferStockAllocated] = useState(false);
   const [showRiskModal, setShowRiskModal] = useState(false);
+  const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
   const [showCopilot, setShowCopilot] = useState(false);
   const [copilotInput, setCopilotInput] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [isProcessingDoc, setIsProcessingDoc] = useState(false);
+
   const [copilotHistory, setCopilotHistory] = useState([
     {
       sender: "system",
@@ -96,6 +102,17 @@ export default function PreciszDashboard() {
     setShowRiskModal(false);
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadedFileName(file.name);
+      setIsProcessingDoc(true);
+      setTimeout(() => {
+        setIsProcessingDoc(false);
+      }, 1200);
+    }
+  };
+
   const handleCopilotSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!copilotInput.trim()) return;
@@ -116,7 +133,6 @@ export default function PreciszDashboard() {
     }, 300);
   };
 
-  // CSV Report Exporter
   const handleExportCSV = () => {
     const csvContent =
       "data:text/csv;charset=utf-8," +
@@ -145,7 +161,7 @@ export default function PreciszDashboard() {
 
   return (
     <div className="min-h-screen bg-[#070A0F] text-slate-100 flex flex-col font-sans">
-      {/* 1. Industrial Header Bar */}
+      {/* 1. Header Bar */}
       <div className="bg-[#0B1017] border-b border-slate-800 px-6 py-2 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -160,11 +176,11 @@ export default function PreciszDashboard() {
         </div>
       </div>
 
-      {/* 2. Top Executive Navbar */}
+      {/* 2. Top Executive Navbar with NOTIFICATION BELL */}
       <header className="border-b border-slate-800 bg-[#0A0E17]/90 backdrop-blur sticky top-0 z-30 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded bg-orange-600 flex items-center justify-center font-black text-slate-950 text-xl tracking-tighter">
+            <div className="w-9 h-9 rounded bg-orange-600 flex items-center justify-center font-black text-slate-950 text-xl tracking-tighter shadow-lg shadow-orange-600/20">
               PS
             </div>
             <div>
@@ -175,19 +191,21 @@ export default function PreciszDashboard() {
             </div>
           </div>
 
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 overflow-x-auto py-1">
             {[
               { id: "COMMAND", label: "Command Center" },
               { id: "PRODUCTION", label: "Production Intel" },
               { id: "INVENTORY", label: "Inventory & Materials" },
               { id: "QUALITY", label: "Quality & Wastage" },
               { id: "ORDERS", label: "Orders & Dispatches" },
+              { id: "INTEGRATIONS", label: "CSV & Integrations" },
+              { id: "DOCUMENTS", label: "Document Interpreter" },
               { id: "GOVERNANCE", label: "Governance & Audit" },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as TabType)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === tab.id
                     ? "bg-slate-800 text-cyan-400 border border-slate-700 shadow-sm font-semibold"
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
@@ -199,11 +217,63 @@ export default function PreciszDashboard() {
           </nav>
         </div>
 
-        {/* Tenant Details & Copilot */}
+        {/* Tenant, NOTIFICATION BELL, and Copilot */}
         <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block font-mono text-xs">
+          <div className="text-right hidden md:block font-mono text-xs">
             <div className="font-semibold text-slate-200">ABC Precision Components</div>
             <div className="text-[11px] text-slate-500">Ambattur, Chennai • {activeShift}</div>
+          </div>
+
+          {/* NOTIFICATION BUTTON WITH COUNTER BADGE */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotificationDrawer(!showNotificationDrawer)}
+              className="relative p-2 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition cursor-pointer"
+              title="System Notifications"
+            >
+              <span className="text-sm">🔔</span>
+              {activeAlerts.length > 0 && (
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full bg-rose-600 text-white font-mono text-[10px] font-bold animate-pulse">
+                  {activeAlerts.length}
+                </span>
+              )}
+            </button>
+
+            {/* Notification Dropdown */}
+            {showNotificationDrawer && (
+              <div className="absolute right-0 mt-2 w-80 bg-[#0C121D] border border-slate-800 rounded-xl shadow-2xl z-50 p-4 space-y-3 font-mono">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold text-white uppercase">Operational Alerts</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-900">
+                    {activeAlerts.length} Active
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {activeAlerts.length === 0 ? (
+                    <div className="text-center py-4 text-xs text-slate-500">All alerts resolved ✓</div>
+                  ) : (
+                    activeAlerts.map((a) => (
+                      <div key={a.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded text-xs space-y-1">
+                        <div className="flex justify-between items-start">
+                          <span className="font-semibold text-slate-200">{a.title}</span>
+                          <span className="text-[9px] text-rose-400 uppercase font-bold">{a.severity}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 flex justify-between items-center">
+                          <span>{a.timestamp}</span>
+                          <button
+                            onClick={() => handleResolveAlert(a.id)}
+                            className="text-cyan-400 hover:underline cursor-pointer"
+                          >
+                            Resolve
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <button
@@ -225,12 +295,11 @@ export default function PreciszDashboard() {
         </div>
       </header>
 
-      {/* 3. Main Dashboard Workspace */}
+      {/* 3. Main Workspace */}
       <main className="flex-1 p-6 space-y-6 max-w-7xl w-full mx-auto">
-        {/* ================= TAB 1: EXECUTIVE COMMAND DASHBOARD ================= */}
+        {/* ================= TAB 1: COMMAND CENTER ================= */}
         {activeTab === "COMMAND" && (
           <div className="space-y-6">
-            {/* Dashboard Sub-header with Quick Actions */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-3">
@@ -263,9 +332,8 @@ export default function PreciszDashboard() {
               </div>
             </div>
 
-            {/* DASHBOARD WIDGET ROW 1: CORE METRICS GAUGES */}
+            {/* Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* Production Progress Card */}
               <div className="p-4 bg-[#0C121D] border border-slate-800 rounded-lg">
                 <div className="flex justify-between items-center text-xs text-slate-400 font-mono uppercase">
                   <span>Production Target</span>
@@ -275,10 +343,7 @@ export default function PreciszDashboard() {
                   {goodUnits} <span className="text-xs text-slate-400 font-normal">/ {targetUnits} pcs</span>
                 </div>
                 <div className="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
-                  <div
-                    className="bg-cyan-500 h-full rounded-full transition-all"
-                    style={{ width: `${achievementRate}%` }}
-                  ></div>
+                  <div className="bg-cyan-500 h-full rounded-full transition-all" style={{ width: `${achievementRate}%` }}></div>
                 </div>
                 <div className="mt-2 text-xs flex justify-between text-slate-400">
                   <span>Achievement: <strong className="text-slate-200">{achievementRate}%</strong></span>
@@ -286,7 +351,6 @@ export default function PreciszDashboard() {
                 </div>
               </div>
 
-              {/* Quality & Tolerance Card with Visual Breach Bar */}
               <div className="p-4 bg-[#0C121D] border border-slate-800 rounded-lg">
                 <div className="flex justify-between items-center text-xs text-slate-400 font-mono uppercase">
                   <span>First-Pass Rejection</span>
@@ -304,7 +368,6 @@ export default function PreciszDashboard() {
                 </div>
               </div>
 
-              {/* Shift Downtime Card */}
               <div className="p-4 bg-[#0C121D] border border-slate-800 rounded-lg">
                 <div className="flex justify-between items-center text-xs text-slate-400 font-mono uppercase">
                   <span>Machinery Downtime</span>
@@ -325,7 +388,6 @@ export default function PreciszDashboard() {
                 </div>
               </div>
 
-              {/* Shift Deficit Card */}
               <div className="p-4 bg-[#0C121D] border border-slate-800 rounded-lg">
                 <div className="flex justify-between items-center text-xs text-slate-400 font-mono uppercase">
                   <span>Shift Output Deficit</span>
@@ -344,9 +406,8 @@ export default function PreciszDashboard() {
               </div>
             </div>
 
-            {/* DASHBOARD WIDGET ROW 2: LIVE SIMULATOR + DETERMINISTIC RISK BOX */}
+            {/* Simulator and Risk Box */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Interactive What-If Bottleneck Simulator */}
               <div className="p-5 bg-[#0C121D] border border-slate-800 rounded-lg flex flex-col justify-between">
                 <div>
                   <div className="text-xs font-mono uppercase text-cyan-400 tracking-wider flex items-center justify-between">
@@ -371,31 +432,20 @@ export default function PreciszDashboard() {
                       onChange={(e) => setDowntimeMinutes(Number(e.target.value))}
                       className="w-full accent-cyan-500 cursor-pointer"
                     />
-                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                      <span>0m (Fully Restored)</span>
-                      <span>30m (Threshold)</span>
-                      <span>60m (Critical)</span>
-                    </div>
                   </div>
                 </div>
-
                 <div className="mt-4 pt-3 border-t border-slate-800/80 flex justify-between items-center text-xs font-mono">
                   <span className="text-slate-400">Projected OEE:</span>
                   <span className="text-emerald-400 font-bold">{oeeEfficiency}%</span>
                 </div>
               </div>
 
-              {/* Deterministic Order Risk Box (Span 2) */}
               <div className="md:col-span-2 p-5 bg-[#0C121D] border border-slate-800 rounded-lg flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="text-xs font-mono uppercase text-slate-400">
-                        Order Commitment Risk Evaluation Engine
-                      </div>
-                      <h3 className="text-sm font-bold text-white mt-0.5">
-                        PO #ORD-2026-904 Delivery Viability
-                      </h3>
+                      <div className="text-xs font-mono uppercase text-slate-400">Order Commitment Risk Evaluation Engine</div>
+                      <h3 className="text-sm font-bold text-white mt-0.5">PO #ORD-2026-904 Delivery Viability</h3>
                     </div>
                     <span
                       className={`px-3 py-1 rounded text-xs font-mono font-bold border ${
@@ -412,7 +462,7 @@ export default function PreciszDashboard() {
                     <div className="p-2.5 bg-slate-950 border border-slate-800 rounded">
                       <div className="text-slate-400">Machinery Downtime Weight</div>
                       <div className="text-white font-bold mt-1">
-                        {downtimeMinutes > 30 ? "+35 pts (Breached 30m limit)" : "0 pts (Within tolerance)"}
+                        {downtimeMinutes > 30 ? "+35 pts (Breached 30m limit)" : "0 pts (Optimal)"}
                       </div>
                     </div>
                     <div className="p-2.5 bg-slate-950 border border-slate-800 rounded">
@@ -440,12 +490,10 @@ export default function PreciszDashboard() {
               </div>
             </div>
 
-            {/* DASHBOARD WIDGET ROW 3: WORKSTATION TELEMETRY GRID */}
+            {/* Machinery Grid */}
             <div className="p-5 bg-[#0C121D] border border-slate-800 rounded-lg">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  Workstation Live Telemetry Grid
-                </h3>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">Workstation Live Telemetry Grid</h3>
                 <span className="text-[11px] font-mono text-slate-500">Facility: Ambattur (ABC-AMB)</span>
               </div>
 
@@ -453,13 +501,7 @@ export default function PreciszDashboard() {
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-white text-xs">CNC Lathe #03</span>
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        downtimeMinutes > 0
-                          ? "bg-rose-950 text-rose-400 border border-rose-800"
-                          : "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                      }`}
-                    >
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${downtimeMinutes > 0 ? "bg-rose-950 text-rose-400 border border-rose-800" : "bg-emerald-950 text-emerald-400 border border-emerald-800"}`}>
                       {downtimeMinutes > 0 ? "MAINTENANCE" : "RUNNING"}
                     </span>
                   </div>
@@ -554,10 +596,10 @@ export default function PreciszDashboard() {
                 + Unlock Emergency SS304 Buffer
               </button>
             </div>
-            <div className="p-5 bg-slate-900 border border-slate-800 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs">
+              <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] font-mono">
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
                     <th className="py-2.5 px-3">Grade</th>
                     <th className="py-2.5 px-3">SKU</th>
                     <th className="py-2.5 px-3">Available Stock</th>
@@ -565,7 +607,7 @@ export default function PreciszDashboard() {
                     <th className="py-2.5 px-3">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
+                <tbody className="divide-y divide-slate-800/60">
                   <tr>
                     <td className="py-3 px-3 font-semibold text-white">SS304 Cold Rolled Bar</td>
                     <td className="py-3 px-3 text-slate-400">SS304-BAR-50MM</td>
@@ -574,17 +616,6 @@ export default function PreciszDashboard() {
                     <td className="py-3 px-3">
                       <span className={`px-2 py-0.5 rounded text-[10px] ${bufferStockAllocated ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-rose-950 text-rose-300 border border-rose-800"}`}>
                         {bufferStockAllocated ? "OPTIMAL" : "SHORTAGE ALERT"}
-                      </span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-semibold text-white">EN8 Carbon Steel</td>
-                    <td className="py-3 px-3 text-slate-400">EN8-ROD-40MM</td>
-                    <td className="py-3 px-3 text-emerald-400 font-bold">820 kg</td>
-                    <td className="py-3 px-3 text-slate-300">400 kg</td>
-                    <td className="py-3 px-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800">
-                        OPTIMAL
                       </span>
                     </td>
                   </tr>
@@ -637,7 +668,6 @@ export default function PreciszDashboard() {
                     <th className="py-2 px-3">Target</th>
                     <th className="py-2 px-3">Good Packed</th>
                     <th className="py-2 px-3">Deficit</th>
-                    <th className="py-2 px-3">Window</th>
                     <th className="py-2 px-3">Status</th>
                   </tr>
                 </thead>
@@ -648,7 +678,6 @@ export default function PreciszDashboard() {
                     <td className="py-3 px-3 text-white">1,000 pcs</td>
                     <td className="py-3 px-3 text-emerald-400">{goodUnits} pcs</td>
                     <td className="py-3 px-3 text-rose-400 font-bold">{deficitUnits} pcs</td>
-                    <td className="py-3 px-3 text-amber-300">4 Hours Left</td>
                     <td className="py-3 px-3">
                       <span className="px-2 py-0.5 rounded text-[10px] bg-rose-950 text-rose-300 border border-rose-800">
                         AT RISK
@@ -661,7 +690,163 @@ export default function PreciszDashboard() {
           </div>
         )}
 
-        {/* ================= TAB 6: GOVERNANCE ================= */}
+        {/* ================= TAB 6: CSV & INTEGRATIONS (RESTORED) ================= */}
+        {activeTab === "INTEGRATIONS" && (
+          <div className="space-y-6">
+            <div className="border-b border-slate-800 pb-4">
+              <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                Data & Ecosystem Integrations
+                <span className="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">
+                  Live Connectors
+                </span>
+              </h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Import CSV telemetry logs, sync ERP databases, or connect SCADA edge relays.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+              <div className="p-4 bg-slate-900 border border-slate-800 rounded-lg">
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>SAP ERP CONNECTOR</span>
+                  <span className="text-emerald-400 font-bold">CONNECTED</span>
+                </div>
+                <div className="text-base font-bold text-white mt-2">BOM Sync Active</div>
+                <div className="text-[11px] text-slate-500 mt-1">Last pull: 10:45 AM (52 SKUs verified)</div>
+              </div>
+
+              <div className="p-4 bg-slate-900 border border-slate-800 rounded-lg">
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>SHOPFLOOR SCADA RELAY</span>
+                  <span className="text-amber-400 font-bold">SIMULATED</span>
+                </div>
+                <div className="text-base font-bold text-white mt-2">Edge Node #01</div>
+                <div className="text-[11px] text-slate-500 mt-1">Mock sensor stream active for Ambattur</div>
+              </div>
+
+              <div className="p-4 bg-slate-900 border border-slate-800 rounded-lg">
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>TALLY / LEDGER GATEWAY</span>
+                  <span className="text-slate-500 font-bold">STANDBY</span>
+                </div>
+                <div className="text-base font-bold text-white mt-2">Purchase Dispatches</div>
+                <div className="text-[11px] text-slate-500 mt-1">Manual CSV upload mode ready</div>
+              </div>
+            </div>
+
+            {/* CSV Import Upload Box */}
+            <div className="p-6 bg-[#0C121D] border-2 border-dashed border-slate-800 rounded-xl text-center space-y-3">
+              <div className="text-3xl">📊</div>
+              <div className="text-sm font-bold text-white">Import Telemetry or Production CSV</div>
+              <p className="text-xs text-slate-400 max-w-md mx-auto font-mono">
+                Upload `.csv` or `.xlsx` exported from machine PLCs or warehouse registers. Columns are mapped automatically.
+              </p>
+              <div>
+                <label className="inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-mono text-xs rounded-md border border-slate-700 cursor-pointer transition">
+                  <span>Browse CSV File</span>
+                  <input type="file" accept=".csv, .xlsx" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+              {uploadedFileName && (
+                <div className="mt-2 text-xs font-mono text-emerald-400">
+                  ✓ Uploaded: {uploadedFileName} (Parsed 120 line telemetry entries)
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 7: DOCUMENT INTERPRETER (RESTORED) ================= */}
+        {activeTab === "DOCUMENTS" && (
+          <div className="space-y-6">
+            <div className="border-b border-slate-800 pb-4">
+              <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                Document Interpreter & Extraction
+                <span className="text-xs px-2 py-0.5 rounded bg-orange-950 text-orange-400 border border-orange-800 font-mono">
+                  Precisz OCR Engine
+                </span>
+              </h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Ingest customer PO PDFs, mill test certificates (MTC), or CMM quality inspection sheets.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Document Dropzone */}
+              <div className="p-6 bg-[#0C121D] border border-slate-800 rounded-xl flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white mb-1">Upload Work Order or Client PO</h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Supports Hyundai, Royal Enfield, and Bosch procurement format PDFs.
+                  </p>
+
+                  <div className="mt-4 p-8 border-2 border-dashed border-slate-800 rounded-lg text-center space-y-3">
+                    <span className="text-3xl">📄</span>
+                    <div className="text-xs font-mono text-slate-300">
+                      Drag & Drop Purchase Order PDF or Click to Upload
+                    </div>
+                    <label className="inline-block px-4 py-1.5 bg-orange-600 hover:bg-orange-500 text-slate-950 font-bold font-mono text-xs rounded cursor-pointer transition">
+                      <span>Select PDF</span>
+                      <input type="file" accept=".pdf, .png, .jpg" onChange={handleFileUpload} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+
+                {isProcessingDoc && (
+                  <div className="mt-4 text-xs font-mono text-cyan-400 flex items-center gap-2">
+                    <span className="animate-spin">⏳</span>
+                    <span>Extracting PO number, contractual tolerance, and batch quantities...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Extracted Schema Preview */}
+              <div className="p-5 bg-slate-900 border border-slate-800 rounded-xl flex flex-col justify-between font-mono text-xs">
+                <div>
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span className="font-bold text-slate-200 uppercase">Extracted PO Schema</span>
+                    <span className="text-[10px] text-emerald-400">100% CONFIDENCE</span>
+                  </div>
+
+                  <div className="mt-3 space-y-2.5">
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span className="text-slate-400">Purchase Order:</span>
+                      <span className="text-cyan-400 font-bold">ORD-2026-904</span>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span className="text-slate-400">Customer:</span>
+                      <span className="text-white">Hyundai Motor Tier-1</span>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span className="text-slate-400">Part Specified:</span>
+                      <span className="text-white">Spline Shaft (SS304)</span>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span className="text-slate-400">Commitment Qty:</span>
+                      <span className="text-white font-bold">1,000 units</span>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span className="text-slate-400">Tolerance Limit:</span>
+                      <span className="text-rose-400 font-bold">Max 2.0% Scrap</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-[11px]">
+                  <span className="text-slate-500">Source: OCR Extracted PO #ORD-904</span>
+                  <button
+                    onClick={() => setActiveTab("COMMAND")}
+                    className="text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    View in Command Center →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 8: GOVERNANCE ================= */}
         {activeTab === "GOVERNANCE" && (
           <div className="space-y-6">
             <div className="border-b border-slate-800 pb-4 flex justify-between items-center">
